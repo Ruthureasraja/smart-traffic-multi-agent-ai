@@ -1,0 +1,5 @@
+agent_id,vehicle_count,waiting_time,emergency_vehicle
+Signal_1,75,65,False
+Signal_2,25,15,False
+Signal_3,50,40,False
+Signal_4,35,25,False
