@@ -14,7 +14,8 @@ coordination logic around them changes) is intentional - it mirrors
 your original Multi-Agent Communication Framework's design.
 """
 
-from decision.decision_engine import base_decision, priority_score, MIN_GREEN_TIME
+from decision.decision_engine import (base_decision, priority_score, MIN_GREEN_TIME,
+                                       WAITING_TIME_ALERT)
 
 
 class TrafficSignalAgent:
@@ -66,10 +67,13 @@ class TrafficSignalAgent:
         - it currently has LOW density (it doesn't need the time itself)
         - donating won't drop it below the safety floor (MIN_GREEN_TIME)
         - it doesn't have an emergency vehicle waiting
+        - it is not itself waiting longer than the alert threshold (a junction
+          that needs more time must never give time away)
         """
         return (
             self.density == "LOW"
             and not self.emergency_vehicle
+            and self.waiting_time <= WAITING_TIME_ALERT
             and (self.green_time - amount) >= MIN_GREEN_TIME
         )
 

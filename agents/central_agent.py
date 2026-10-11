@@ -55,7 +55,7 @@ class CentralControllerAgent:
         )
         # ...and junctions that CAN spare some green time
         donors = sorted(
-            [a for a in agents if a.density == "LOW" and not a.emergency_vehicle],
+            [a for a in agents if a.can_donate(MAX_DONATION)],
             key=lambda a: a.priority(),
         )
 

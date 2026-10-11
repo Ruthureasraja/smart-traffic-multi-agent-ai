@@ -31,7 +31,8 @@ smart_traffic_multi_agent/
 │
 ├── simulation/
 │   ├── __init__.py
-│   ├── traffic_generator.py        <- Default + random traffic scenario generator
+│   ├── traffic_generator.py        <- Default / random / CSV-loaded traffic scenarios
+│   ├── signal_controller.py        <- RED/YELLOW/GREEN right-of-way state machine
 │   └── simulation_engine.py        <- Orchestrates one full simulation run (all 3 architectures)
 │
 ├── visualization/
@@ -40,6 +41,8 @@ smart_traffic_multi_agent/
 │
 ├── data/
 │   └── sample_traffic.csv          <- The default 4-junction demonstration scenario
+│
+├── tests/                          <- 41 pytest tests (decision, agent, signals, simulation, fixes)
 │
 └── notebooks/
     └── multi_agent_traffic_demo.ipynb   <- Google Colab demo (imports the SAME modules above)
@@ -69,20 +72,21 @@ This opens the dashboard in your browser (usually `http://localhost:8501`).
 
 ### 3. Run the Google Colab notebook
 
-Upload the entire `smart_traffic_multi_agent` folder (as a zip) to your
-Colab session, then open `notebooks/multi_agent_traffic_demo.ipynb` and
-run all cells — the first cell unzips the project, the second sets up
-imports, then every architecture is demonstrated independently of any UI.
+Upload the entire `smart_traffic_multi_agent` folder to your Colab session
+(unzip it first, e.g. `!unzip smart_traffic_multi_agent.zip`), then open
+`notebooks/multi_agent_traffic_demo.ipynb` and run all cells — the first
+cell sets up the import path, then every architecture is demonstrated
+independently of any UI.
 
 ### 4. Run the automated tests (optional, proves the logic works)
 
 ```bash
-pip install pytest
+pip install -r requirements-dev.txt
 pytest -v
 ```
-*(Note: add a `tests/` folder with unit tests if your instructor requires
-formal test coverage — the core functions in `decision_engine.py` are
-pure functions with no side effects, so they're straightforward to test.)*
+The `tests/` folder contains 41 tests covering the decision engine, the
+agent donation rules, the RED/YELLOW/GREEN state machine, all three
+architectures end to end, and regression tests for fixed bugs.
 
 ---
 
@@ -172,7 +176,7 @@ globally optimal outcome compared to Centralized.
   camera, or GPS data.
 - Communication is simulated via direct Python function/object calls,
   not real network communication across separate machines/processes.
-- Negotiation logic uses a fixed donation amount (15s) rather than a
+- Negotiation logic uses a fixed donation amount (10s) rather than a
   fully optimized allocation algorithm.
 
 **13. Future enhancements**
@@ -205,21 +209,64 @@ table are computed live from actual simulation data — never hard-coded.)*
 
 ## Sample Output (Default Scenario)
 
+Values below are real output of the code (verified by running it).
+
 ```
-Signal_1: Vehicles=75, Waiting=65s -> HIGH density -> Green Time boosted to 65s
-Signal_2: Vehicles=25, Waiting=15s -> LOW density  -> Green Time 20s (can donate)
+Signal_1: Vehicles=75, Waiting=65s -> HIGH density   -> Green Time 65s (50s base + 15s boost)
+Signal_2: Vehicles=25, Waiting=15s -> LOW density    -> Green Time 20s (can donate: 20-10 >= 10)
 Signal_3: Vehicles=50, Waiting=40s -> MEDIUM density -> Green Time 35s
 Signal_4: Vehicles=35, Waiting=25s -> MEDIUM density -> Green Time 35s
 
 Decentralized negotiation:
 Signal_1 -> Signal_2: REQUEST_GREEN_TIME (density HIGH)
-Signal_2 -> Signal_1: Request accepted - LOW density, donating 15s
-Signal_1 green time: 65s -> 80s | Signal_2 green time: 20s -> 15s
+Signal_2 -> Signal_1: Request accepted - LOW density, donating green time
+Signal_1 green time: 65s -> 75s | Signal_2 green time: 20s -> 10s
 
 Average Waiting Time Before: 36.25s
-Average Waiting Time After:  ~28-30s (varies with negotiation outcome)
-Improvement: computed live, typically 15-25%
+Average Waiting Time After:  34.08s
+Improvement: 6.0%   (computed live by the simulation)
 ```
+
+Measured results (default 4-junction scenario and a stress scenario with
+two HIGH-traffic and two LOW-traffic junctions):
+
+| Scenario | Architecture | Avg wait before | Avg wait after | Improvement | Messages |
+|---|---|---|---|---|---|
+| Default | Centralized | 36.25 s | 34.08 s | 6.0% | 8 |
+| Default | Hierarchical | 36.25 s | 34.08 s | 6.0% | 7 |
+| Default | Decentralized | 36.25 s | 34.08 s | 6.0% | 6 |
+| Stress | Centralized | 42.50 s | 37.50 s | 11.76% | 10 |
+| Stress | Hierarchical | 42.50 s | 37.50 s | 11.76% | 8 |
+| Stress | Decentralized | 42.50 s | 37.50 s | 11.76% | 12 |
+
+Stress scenario: (vehicles, waiting) = (90, 80), (20, 10), (80, 70), (15, 10).
+On these inputs all three architectures reach the same final green-time
+allocation; they differ in *how* they communicate (message count and
+path), not in the final waiting time.
+
+---
+
+## Traffic Light Cycle (RED / YELLOW / GREEN)
+
+Density decides **how long** a junction's green phase lasts; the cycle
+decides **when** it happens. `SignalPhaseController` builds a repeating
+cycle in which exactly one junction holds the right of way at a time
+(emergency junctions first, then by priority score), each green phase is
+followed by a 3-second YELLOW, and every other junction shows RED.
+In the default scenario the cycle is 167 s long and the service order is
+Signal_1 -> Signal_3 -> Signal_4 -> Signal_2.
+
+---
+
+## Agentic AI Characteristics
+
+- **Autonomy:** each `TrafficSignalAgent` computes its own density, green time and priority from its local state.
+- **Perception:** vehicle count, waiting time and emergency status of its own junction.
+- **Decision making:** explainable rule-based policy with a plain-English reason for every decision.
+- **Communication / coordination:** structured request-response messages in three architectures (centralized, hierarchical, peer-to-peer).
+- **Goal-directed behaviour:** reduce average waiting time across the network, with emergency vehicles overriding all other goals.
+- **Safety constraints:** minimum green floor, one right-of-way holder at a time, validated inputs.
+- Agents are rule-based; no learning or LLM component is used (listed under future enhancements).
 
 ---
 
@@ -230,7 +277,7 @@ Improvement: computed live, typically 15-25%
 | 1 | What problem does this solve? | Static/manual traffic signal timing is inefficient; agents negotiate to redistribute green time dynamically. |
 | 2 | Why 3 architectures? | To demonstrate and compare the standard ways multi-agent systems can be organized. |
 | 3 | What triggers a negotiation? | A junction has HIGH density OR waiting time > 60s. |
-| 4 | What stops a donor from giving away all its time? | `MIN_GREEN_TIME` floor (15s) in `can_donate()`. |
+| 4 | What stops a donor from giving away all its time? | `MIN_GREEN_TIME` floor (10s) in `can_donate()`; a junction that is itself waiting > 60s also never donates. |
 | 5 | How is emergency vehicle priority handled? | Immediate 60s green time override, skips normal negotiation entirely. |
 | 6 | Is the waiting-time improvement real or fake? | Computed live via `estimate_waiting_time_after()` — not hard-coded, but based on a documented simplifying formula. |
 | 7 | What was reused from your original framework? | The shared message dictionary format and the concept of Central/Manager/Peer communication patterns. |

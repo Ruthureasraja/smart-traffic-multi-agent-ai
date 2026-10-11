@@ -6,8 +6,12 @@ scenario described in the project brief, or randomized values for
 further testing/exploration.
 """
 
+import csv
 import random
+from pathlib import Path
 from typing import List, Dict
+
+MAX_INPUT_VALUE = 300   # matches the dashboard number_input limits
 
 
 DEFAULT_SCENARIO: List[Dict] = [
@@ -54,8 +58,8 @@ def perturb_scenario(junction_data: List[Dict], max_change: int = 10, seed: int 
     updated = []
 
     for j in junction_data:
-        new_vehicle_count = max(0, j["vehicle_count"] + rng.randint(-max_change, max_change))
-        new_waiting_time = max(0, j["waiting_time"] + rng.randint(-max_change, max_change))
+        new_vehicle_count = min(MAX_INPUT_VALUE, max(0, j["vehicle_count"] + rng.randint(-max_change, max_change)))
+        new_waiting_time = min(MAX_INPUT_VALUE, max(0, j["waiting_time"] + rng.randint(-max_change, max_change)))
         updated.append({
             "agent_id": j["agent_id"],
             "vehicle_count": new_vehicle_count,
@@ -64,3 +68,30 @@ def perturb_scenario(junction_data: List[Dict], max_change: int = 10, seed: int 
         })
 
     return updated
+
+
+def load_scenario_from_csv(path: str = None) -> List[Dict]:
+    """
+    Loads a junction scenario from a CSV file with the columns
+    agent_id, vehicle_count, waiting_time, emergency_vehicle.
+    Defaults to data/sample_traffic.csv (the demonstration scenario).
+    """
+    if path is None:
+        path = Path(__file__).resolve().parent.parent / "data" / "sample_traffic.csv"
+
+    required = {"agent_id", "vehicle_count", "waiting_time"}
+    with open(path, newline="") as f:
+        reader = csv.DictReader(f)
+        if not reader.fieldnames or not required.issubset(reader.fieldnames):
+            raise ValueError(f"CSV must contain the columns: {sorted(required)}")
+        rows = []
+        for r in reader:
+            rows.append({
+                "agent_id": r["agent_id"].strip(),
+                "vehicle_count": int(r["vehicle_count"]),
+                "waiting_time": int(r["waiting_time"]),
+                "emergency_vehicle": str(r.get("emergency_vehicle", "False")).strip().lower() == "true",
+            })
+    if not rows:
+        raise ValueError("CSV contains no junction rows.")
+    return rows

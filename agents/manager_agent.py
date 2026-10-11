@@ -44,7 +44,7 @@ class AreaManagerAgent:
             key=lambda a: a.priority(), reverse=True,
         )
         donors = sorted(
-            [a for a in self.agents if a.density == "LOW" and not a.emergency_vehicle],
+            [a for a in self.agents if a.can_donate(MAX_DONATION)],
             key=lambda a: a.priority(),
         )
 

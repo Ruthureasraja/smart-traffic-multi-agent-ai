@@ -3,3 +3,7 @@ __pycache__/
 .streamlit/
 *.egg-info/
 .DS_Store
+.pytest_cache/
+.venv/
+venv/
+.ipynb_checkpoints/
